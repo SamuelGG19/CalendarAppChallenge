@@ -8,14 +8,15 @@ from app.services.util import generate_unique_id, reminder_not_found_error, even
 
 @dataclass
 class Reminder:
+    EMAIL: ClassVar[str] = "email"
+    SYSTEM: ClassVar[str] = "system"
     date_time: datetime
-    EMAIL: ClassVar[str] = field(default="email")
-    SYSTEM: ClassVar[str] = field(default="system")
-    type: str = field(init=False, default=EMAIL)
+    type: str = EMAIL
 
     def __str__(self) -> str:
         return f"Reminder on {self.date_time} of type {self.type}"
 
+    
 @dataclass
 class Event:
     title: str
@@ -23,18 +24,17 @@ class Event:
     date_: date
     start_at: time
     end_at: time
-    reminders: list[Reminder] = field(init=False, default_factory=[])
-    id: str = field(init=False, default_factory=generate_unique_id())
+    reminders: list[Reminder] = field(init=False, default_factory=list)
+    id: str = field(default_factory=generate_unique_id)
 
-    def add_reminder(self):
-        pass
-        #self.reminders.append(Reminder(self.date_))
+    def add_reminder(self, date_time: datetime, type_: str):
+        self.reminders.append(Reminder(date_time, type_))
 
     def delete_reminder(self, reminder_index: int):
-        if reminder_index >= 0 and reminder_index <= len(self.reminders) - 1:
-            self.reminders.pop(reminder_index)
-        else:
+        if reminder_index < 0 or reminder_index >= len(self.reminders):
             reminder_not_found_error()
+        else:
+            del self.reminders[reminder_index]
 
     def __str__(self) -> str:
         return f"ID: {self.id}\nEvent title: {self.title}\nDescription: {self.description}\nTime: {self.start_at} - {self.end_at}"
@@ -48,14 +48,17 @@ class Day:
         self._init_slots()
 
     def _init_slots(self):
-        for i in range(24):
-            self.slots[time(i, 0)] = None
-            self.slots[time(i, 15)] = None
-            self.slots[time(i, 30)] = None
-            self.slots[time(i, 45)] = None
+        for hour in range(24):
+            for minute in range(0, 60, 15):
+                self.slots[time(hour, minute)] = None
 
     def add_event(self, event_id: str, start_at: time, end_at: time):
-        pass
+        for slot in self.slots:
+            if start_at <= slot < end_at:
+                if self.slots[slot] is None:
+                    self.slots[slot] = event_id
+                else:
+                    slot_not_available_error()
 
     def delete_event(self, event_id: str):
         deleted = False
@@ -87,22 +90,34 @@ class Calendar:
 
     def add_event(self, title: str, description: str, date_: date, start_at: time, end_at: time):
         pass
-        #if date_ > datetime.now().date():
-        #    date_lower_than_today_error()
-        #else:
-        #    if self.days.get(date_) == None:
-        #        self.days[date_] = Day(date_)
-        #        event = Event(title, description, date_, start_at, end_at)
-        #        Day.add_event()
+        if date_ < datetime.now().date():
+            date_lower_than_today_error()
+            
+        if date_ not in self.days:
+            self.days[date_] = Day(date_)
+            
+        event = Event(title, description, date_, start_at, end_at)
+        self.days[date_].add_event(event.id, start_at, end_at)
+        self.events[event.id] = event
 
     def add_reminder(self, event_id: str, date_time: datetime, type_: str):
         if event_id not in self.events:
             event_not_found_error()
         else:
-            Event.add_reminder()
+            event.add_reminder(date_time, type_)
 
     def find_available_slots(self, date_: date) -> list[time]:
-        pass
+        available_slots = []
+        day = self.days.get(date_)
+        if day:
+            for slot, event in day.slots.items():
+                if not event:
+                    available_slots.append(slot)
+        else:
+            day = Day(date_)
+            available_slots = list(day.slots.keys())
+
+        return available_slots
 
     def update_event(self, event_id: str, title: str, description: str, date_: date, start_at: time, end_at: time):
         event = self.events[event_id]
